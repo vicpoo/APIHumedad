@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -11,9 +10,31 @@ import (
 	"github.com/vicpoo/APIHumedad/Humedad/infrastructure"
 )
 
+// Middleware de ejemplo para manejar CORS y otros ajustes
+func TestMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Permitir solicitudes desde cualquier origen (CORS)
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Si es una solicitud OPTIONS, responder inmediatamente
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		// Continuar con la siguiente función en la pila de middlewares
+		c.Next()
+	}
+}
+
 func main() {
 	// Configurar Gin
 	r := gin.Default()
+
+	// Agregar el middleware de prueba (CORS)
+	r.Use(TestMiddleware())
 
 	// Inicializar el hub de WebSocket y el consumidor
 	hub := infrastructure.NewHub()
@@ -26,7 +47,7 @@ func main() {
 	// Configurar rutas
 	infrastructure.SetupRoutes(r, hub)
 
-	// Iniciar consumidor de RabbitMQ
+	// Iniciar consumidor de RabbitMQ para temperatura
 	if err := messagingService.ConsumeTemperatureMessages(); err != nil {
 		log.Fatalf("Failed to start RabbitMQ consumer: %v", err)
 	}
