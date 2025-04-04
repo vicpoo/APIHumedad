@@ -1,9 +1,9 @@
-// messaging_service.go
 package infrastructure
 
 import (
 	"encoding/json"
 	"log"
+	"time"
 
 	"github.com/streadway/amqp"
 )
@@ -15,9 +15,6 @@ type MessagingService struct {
 }
 
 func NewMessagingService(hub *Hub) *MessagingService {
-	// Note: Port 1883 is for MQTT, RabbitMQ typically uses 5672 for AMQP
-	// If you really need to use 1883, you might need an MQTT plugin in RabbitMQ
-	// or use an MQTT client library instead of AMQP
 	conn, err := amqp.Dial("amqp://reyhades:reyhades@44.223.218.9:5672/")
 	if err != nil {
 		log.Fatalf("Failed to connect to RabbitMQ: %s", err)
@@ -30,7 +27,6 @@ func NewMessagingService(hub *Hub) *MessagingService {
 		return nil
 	}
 
-	// Declare the exchange (if it doesn't exist)
 	err = ch.ExchangeDeclare(
 		"amq.topic", // exchange name
 		"topic",     // type
@@ -53,7 +49,6 @@ func NewMessagingService(hub *Hub) *MessagingService {
 }
 
 func (ms *MessagingService) ConsumeTemperatureMessages() error {
-	// Declare the queue (if it doesn't exist)
 	q, err := ms.ch.QueueDeclare(
 		"esp32humedad", // queue name
 		true,           // durable
@@ -66,7 +61,6 @@ func (ms *MessagingService) ConsumeTemperatureMessages() error {
 		return err
 	}
 
-	// Bind the queue to the exchange with the correct routing key
 	err = ms.ch.QueueBind(
 		q.Name,         // queue name
 		"sp32.humedad", // routing key
@@ -93,21 +87,39 @@ func (ms *MessagingService) ConsumeTemperatureMessages() error {
 
 	go func() {
 		for msg := range msgs {
-			// Log the raw message
-			log.Printf("Received raw message: %s", string(msg.Body))
-
-			// Parse the JSON to make it more readable
-			var data map[string]interface{}
-			if err := json.Unmarshal(msg.Body, &data); err == nil {
-				log.Printf("Parsed temperature data: %+v", data)
-			} else {
+			var rawData map[string]interface{}
+			if err := json.Unmarshal(msg.Body, &rawData); err != nil {
 				log.Printf("Error parsing JSON: %v", err)
+				msg.Nack(false, true) // Requeue the message
+				continue
 			}
 
-			// Send the message to all WebSocket clients
-			ms.hub.broadcast <- msg.Body
+			// Transform data to match frontend interface
+			humedadValue, ok := rawData["value"].(float64)
+			if !ok {
+				log.Printf("Invalid humidity value: %v", rawData["value"])
+				msg.Ack(false)
+				continue
+			}
 
-			// Acknowledge successful processing
+			adaptedData := map[string]interface{}{
+				"humedad":     humedadValue,
+				"unit":        rawData["unit"],
+				"device":      rawData["device_id"],
+				"ts":          rawData["timestamp"],
+				"created_at":  time.Now().Format(time.RFC3339),
+				"sensor_type": rawData["sensor_type"],
+			}
+
+			adaptedMessage, err := json.Marshal(adaptedData)
+			if err != nil {
+				log.Printf("Error marshaling adapted data: %v", err)
+				msg.Ack(false)
+				continue
+			}
+
+			log.Printf("Sending to WebSocket: %s", string(adaptedMessage))
+			ms.hub.broadcast <- adaptedMessage
 			msg.Ack(false)
 		}
 	}()

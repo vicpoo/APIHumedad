@@ -3,6 +3,7 @@ package infrastructure
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -11,6 +12,10 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		// Permite conexiones desde cualquier origen (en producción deberías ser más restrictivo)
+		return true
+	},
 }
 
 type Hub struct {

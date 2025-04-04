@@ -1,4 +1,4 @@
-// temperature_usecase.go
+// humedad_usecase.go
 package application
 
 import (
