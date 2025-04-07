@@ -65,7 +65,7 @@ func main() {
 		}
 	}()
 
-	log.Println("Server started on port 8002")
+	log.Println("Server started on port :8002")
 	log.Println("Temperature consumer started")
 
 	// Esperar señal de apagado
